@@ -1,0 +1,156 @@
+#!/usr/bin/env bash
+# git-cleanup: remove one file or folder from Git history (wraps git-filter-repo)
+set -u
+
+bold() { printf '\033[1m%s\033[0m\n' "$*"; }
+info() { printf '  %s\n' "$*"; }
+warn() { printf '\033[33m! %s\033[0m\n' "$*"; }
+err()  { printf '\033[31mx %s\033[0m\n' "$*" >&2; }
+ok()   { printf '\033[32m✓ %s\033[0m\n' "$*"; }
+
+ask_yes_no() { # $1 = question
+  local a; read -r -p "$1 [y/N] " a; [[ "$a" =~ ^[Yy]$ ]]
+}
+ask_typed() { # $1 = word user must type
+  local a; read -r -p "Type '$1' to continue: " a; [[ "$a" == "$1" ]]
+}
+
+# ---------- 1. Checks ----------
+bold "Git History Cleanup"
+command -v git >/dev/null || { err "Git is not installed."; exit 1; }
+git rev-parse --is-inside-work-tree >/dev/null 2>&1 || { err "Run this inside a Git repository."; exit 1; }
+cd "$(git rev-parse --show-toplevel)" || exit 1
+
+if ! git filter-repo --version >/dev/null 2>&1; then
+  warn "git-filter-repo is not installed."
+  if command -v pip3 >/dev/null && ask_yes_no "Install it now with 'pip3 install --user git-filter-repo'?"; then
+    pip3 install --user git-filter-repo || { err "Install failed."; exit 1; }
+    export PATH="$HOME/.local/bin:$PATH"
+    git filter-repo --version >/dev/null 2>&1 || { err "Still not found. Add ~/.local/bin to PATH and retry."; exit 1; }
+  else
+    err "Please install it (pip3 install git-filter-repo) and run again."; exit 1
+  fi
+fi
+
+if [[ -n "$(git status --porcelain)" ]]; then
+  warn "You have uncommitted changes. Commit or stash them first."; exit 1
+fi
+
+# ---------- 2. Choose a path ----------
+tmp="$(mktemp)"; trap 'rm -f "$tmp"' EXIT
+# Every path that ever existed in any commit, plus every parent folder (marked with trailing /)
+git log --all --name-only --pretty=format: | sed '/^$/d' | sort -u > "$tmp.files"
+{
+  cat "$tmp.files"
+  while IFS= read -r f; do
+    d="$f"
+    while [[ "$d" == */* ]]; do d="${d%/*}"; echo "$d/"; done
+  done < "$tmp.files"
+} | sort -u > "$tmp"
+rm -f "$tmp.files"
+[[ -s "$tmp" ]] || { err "No files found in history."; exit 1; }
+
+echo
+bold "What do you want to remove from history?"
+info "Folders end with /. Files and folders that were deleted earlier are included."
+target=""
+while [[ -z "$target" ]]; do
+  read -r -p "Search (part of the name, or Enter to list all): " q
+  mapfile -t matches < <(grep -iF -- "$q" "$tmp" | head -30)
+  if [[ ${#matches[@]} -eq 0 ]]; then warn "No matches."; continue; fi
+  for i in "${!matches[@]}"; do printf '  %2d) %s\n' "$((i+1))" "${matches[$i]}"; done
+  [[ ${#matches[@]} -eq 30 ]] && info "(showing first 30, search to narrow down)"
+  read -r -p "Number to select (or Enter to search again): " n
+  if [[ "$n" =~ ^[0-9]+$ ]] && (( n >= 1 && n <= ${#matches[@]} )); then
+    target="${matches[$((n-1))]}"
+  fi
+done
+
+if [[ "$target" == */ ]]; then kind="folder"; else kind="file"; fi
+echo; bold "Selected $kind: $target"
+
+# ---------- 3. Backup + confirm ----------
+origin_url="$(git remote get-url origin 2>/dev/null || true)"
+backup="../$(basename "$PWD")-backup-$(date +%Y%m%d-%H%M%S).bundle"
+echo
+bold "What will happen"
+info "1. A backup of your repo is saved to: $backup"
+info "2. '$target' is removed from ALL commits on ALL branches and tags."
+info "3. Commit IDs change for every affected commit."
+info "4. Nothing is pushed to GitHub unless you confirm later."
+echo
+ask_typed "yes" || { echo "Cancelled. Nothing changed."; exit 0; }
+
+git bundle create "$backup" --all >/dev/null 2>&1 || { err "Backup failed. Stopping."; exit 1; }
+ok "Backup saved: $backup"
+warn "If this is a Codespace, download the backup before deleting the Codespace."
+
+# ---------- 4. Clean ----------
+echo; bold "Cleaning history..."
+out="$(git filter-repo --invert-paths --path "$target" 2>&1)"; rc=$?
+if [[ $rc -ne 0 ]]; then
+  if grep -qi "fresh clone" <<<"$out"; then
+    warn "git-filter-repo says this doesn't look like a fresh clone."
+    info "It refuses by default because the rewrite can't be undone in this folder."
+    info "You do have the backup above, so forcing is reasonably safe."
+    ask_typed "force" || { echo "Cancelled. Nothing changed."; exit 0; }
+    out="$(git filter-repo --invert-paths --path "$target" --force 2>&1)"; rc=$?
+  fi
+fi
+if [[ $rc -ne 0 ]]; then
+  err "Cleanup failed:"; echo "$out" >&2
+  info "Your repo was not changed. Backup is at: $backup"
+  exit 1
+fi
+ok "History rewritten."
+
+# filter-repo removes 'origin' on purpose; put it back
+if [[ -n "$origin_url" ]]; then git remote add origin "$origin_url" 2>/dev/null; fi
+
+# ---------- 5. Verify ----------
+echo; bold "Verifying..."
+bad=0
+if [[ -n "$(git log --all --oneline -- "$target" 2>/dev/null)" ]]; then bad=1; fi
+if git rev-list --objects --all | cut -d' ' -f2- | grep -qxF -- "${target%/}" ; then bad=1; fi
+if [[ "$kind" == folder ]] && git rev-list --objects --all | cut -d' ' -f2- | grep -qF -- "$target"; then bad=1; fi
+if [[ $bad -eq 1 ]]; then
+  err "'$target' still appears in history. Do NOT push. Restore from: $backup"
+  exit 1
+fi
+ok "'$target' is gone from all commits."
+info "If it was renamed earlier, the old name may still exist. Run this tool again for that name."
+
+# ---------- 6. Publish (optional) ----------
+echo
+if [[ -z "$origin_url" ]]; then
+  warn "No 'origin' remote found, so there is nothing to push. Done."; exit 0
+fi
+mapfile -t branches < <(git for-each-ref --format='%(refname:short)' refs/heads)
+mapfile -t tags < <(git for-each-ref --format='%(refname:short)' refs/tags)
+bold "Publish to GitHub?"
+info "Remote: $origin_url"
+info "Branches (${#branches[@]}): ${branches[*]:-none}"
+info "Tags (${#tags[@]}): ${tags[*]:-none}"
+warn "This FORCE-PUSHES and overwrites these branches/tags on GitHub."
+info "Teammates will need to re-clone. Open PRs, forks and caches may still hold the old data."
+info "If the removed file contained a password or key, change it now. Cleaning history is not enough."
+echo
+if ! ask_typed "push"; then
+  info "Not pushed. Your cleaned repo is local only. To push later: git push --force origin <branch>"
+  exit 0
+fi
+
+refspecs=()
+for b in "${branches[@]}"; do refspecs+=("+refs/heads/$b:refs/heads/$b"); done
+for t in "${tags[@]}"; do refspecs+=("+refs/tags/$t:refs/tags/$t"); done
+if push_out="$(git push origin "${refspecs[@]}" 2>&1)"; then
+  ok "Pushed."
+else
+  err "Push failed:"; echo "$push_out" >&2
+  if grep -qiE "protected branch|GH006" <<<"$push_out"; then
+    warn "A branch is protected. In GitHub: Settings > Branches, temporarily allow force pushes, then run:"
+    info "git push origin --force <branch>"
+  fi
+  exit 1
+fi
+echo; ok "All done."
