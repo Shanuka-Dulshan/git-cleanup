@@ -1,3 +1,4 @@
+
 <p align="center">
   <img
     src="https://raw.githubusercontent.com/Shanuka-Dulshan/project-assets/refs/heads/main/git-cleanup/git-cleanup-cover.png"
@@ -6,26 +7,17 @@
   />
 </p>
 
+
 <p align="left">
-  <a href="https://github.com/Shanuka-Dulshan/git-cleanup">
-    <img src="https://img.shields.io/badge/platform-Codespaces%20%7C%20Linux-2563EB?style=flat-square&logo=linux&logoColor=white" alt="Platform" />
-  </a>
-  <a href="https://www.gnu.org/software/bash/">
-    <img src="https://img.shields.io/badge/shell-Bash-4EAA25?style=flat-square&logo=gnubash&logoColor=white" alt="Bash" />
-  </a>
-  <a href="https://github.com/newren/git-filter-repo">
-    <img src="https://img.shields.io/badge/Git-history%20cleanup-F05032?style=flat-square&logo=git&logoColor=white" alt="Git history cleanup" />
-  </a>
-  <a href="LICENSE">
-    <img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="MIT License" />
-  </a>
-  <a href="https://github.com/Shanuka-Dulshan/git-cleanup/stargazers">
-    <img src="https://img.shields.io/github/stars/Shanuka-Dulshan/git-cleanup?style=flat-square&logo=github" alt="GitHub stars" />
-  </a>
-  <a href="https://github.com/Shanuka-Dulshan/git-cleanup/issues">
-    <img src="https://img.shields.io/github/issues/Shanuka-Dulshan/git-cleanup?style=flat-square" alt="GitHub issues" />
-  </a>
+  <a href="https://github.com/Shanuka-Dulshan/git-cleanup"><img src="https://img.shields.io/badge/platform-Codespaces%20%7C%20Linux-2563EB?style=flat&logo=linux&logoColor=white" alt="Platform" /></a>&nbsp;
+  <a href="https://www.gnu.org/software/bash/"><img src="https://img.shields.io/badge/shell-Bash-4EAA25?style=flat&logo=gnubash&logoColor=white" alt="Bash" /></a>&nbsp;
+  <a href="https://github.com/newren/git-filter-repo"><img src="https://img.shields.io/badge/Git-history%20cleanup-F05032?style=flat&logo=git&logoColor=white" alt="Git history cleanup" /></a>&nbsp;
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat" alt="MIT License" /></a>&nbsp;
+  <a href="https://github.com/Shanuka-Dulshan/git-cleanup/stargazers"><img src="https://img.shields.io/github/stars/Shanuka-Dulshan/git-cleanup?style=flat&logo=github" alt="GitHub stars" /></a>&nbsp;
+  <a href="https://github.com/Shanuka-Dulshan/git-cleanup/issues"><img src="https://img.shields.io/github/issues/Shanuka-Dulshan/git-cleanup?style=flat" alt="GitHub issues" /></a>
 </p>
+
+
 # git-cleanup
 
 
